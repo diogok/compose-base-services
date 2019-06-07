@@ -1,11 +1,13 @@
 version: "2"
 
 services:
-  # service discovery
+  # Service discovery
+  ## Service discovery server
   consul:
     image: consul:1.5.0
     ports:
       - 8500:8500
+  ## Export consul metrics
   consul-exporter:
     image: prom/consul-exporter
     command: "--consul.server consul:8500"
@@ -14,7 +16,7 @@ services:
     environment:
       SERVICE_NAME: "consul-exporter"
       SERVICE_TAGS: "prometheus"
-
+  ## Auto register all this services
   registrator:
     image:  gliderlabs/registrator:latest
     command: "-internal=true consul://consul:8500"
@@ -23,11 +25,13 @@ services:
     depends_on:
       - consul
 
-  # metrics
+  # Metrics
+  ## Prometheus config
   prom-consul:
     image: diogok/prom-consul:consul
     volumes:
       - /etc/prometheus
+  ## Metrics services
   prometheus:
     image: prom/prometheus:v2.8.1
     ports:
@@ -37,10 +41,12 @@ services:
     volumes_from:
       - prom-consul
       - consul
+  ## Provision dashboards
   grafana-provision:
-    image: diogok/grafana-provisioning:v0.0.1
+    image: diogok/grafana-provisioning:v0.0.2
     volumes:
       - /etc/grafana/provisioning
+  ## To view the metrics
   grafana:
     image: "grafana/grafana:6.2.1"
     volumes_from:
@@ -51,7 +57,7 @@ services:
       PROMETHEUS_PORT: 9090
     ports:
       - 3000:3000
-
+  ## Machine metrics
   node-exporter:
     image: "quay.io/prometheus/node-exporter"
     network_mode: host
@@ -60,11 +66,13 @@ services:
       SERVICE_NAME: "node-exporter"
       SERVICE_TAGS: "prometheus"
 
-  # logging
+  # Logging
+  ## To store the logs
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.7.1
     environment:
       SERVICE_9200_NAME: elasticsearch
+  ## To ship the logs
   fluentd:
     image: diogok/fluentbit:v0.0.4
     environment:
@@ -77,12 +85,14 @@ services:
       - 24224:24224
     depends_on:
       - elasticsearch
+  ## To view the logs
   kibana:
     image: docker.elastic.co/kibana/kibana-oss:6.3.1
     ports:
       - 5601:5601
     depends_on:
       - elasticsearch
+  ## Export ES metrics
   es-exporter:
     image: "justwatch/elasticsearch_exporter:1.0.2"
     command: "-es.uri http://elasticsearch:9200 -es.all -es.indices"
@@ -92,11 +102,13 @@ services:
     depends_on:
       - elasticsearch
  
-  # queue
+  # message queue
+  ## MQ server
   rabbitmq:
     image: rabbitmq:3.7-management
     ports:
       - 15672:15672
+  ## message queue metrics
   rabbitmq-exporter:
     image: kbudde/rabbitmq-exporter
     environment:
