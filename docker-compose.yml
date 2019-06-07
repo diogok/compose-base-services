@@ -1,0 +1,105 @@
+version: "2"
+
+services:
+  # service discovery
+  consul:
+    image: consul:1.5.0
+    ports:
+      - 8500:8500
+  consul-exporter:
+    image: prom/consul-exporter
+    command: "--consul.server consul:8500"
+    depends_on:
+      - consul
+    environment:
+      SERVICE_NAME: "consul-exporter"
+      SERVICE_TAGS: "prometheus"
+
+  registrator:
+    image:  gliderlabs/registrator:latest
+    command: "-internal=true consul://consul:8500"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock
+    depends_on:
+      - consul
+
+  # metrics
+  prom-consul:
+    image: diogok/prom-consul:consul
+    volumes:
+      - /etc/prometheus
+  prometheus:
+    image: prom/prometheus:v2.8.1
+    ports:
+      - 9090:9090
+    environment:
+      SERVICE_NAME: prometheus
+    volumes_from:
+      - prom-consul
+      - consul
+  grafana-provision:
+    image: diogok/grafana-provisioning:v0.0.1
+    volumes:
+      - /etc/grafana/provisioning
+  grafana:
+    image: "grafana/grafana:6.2.1"
+    volumes_from:
+      - grafana-provision
+    environment:
+      SERVICE_NAME: grafana 
+      PROMETHEUS_HOST: prometheus
+      PROMETHEUS_PORT: 9090
+    ports:
+      - 3000:3000
+
+  node-exporter:
+    image: "quay.io/prometheus/node-exporter"
+    network_mode: host
+    pid: host
+    environment:
+      SERVICE_NAME: "node-exporter"
+      SERVICE_TAGS: "prometheus"
+
+  # logging
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.7.1
+    environment:
+      SERVICE_9200_NAME: elasticsearch
+  fluentd:
+    image: diogok/fluentbit:v0.0.4
+    environment:
+      ES_HOST: elasticsearch
+      SERVICE_9600_NAME: "fluentbit"
+      SERVICE_9600_TAGS: "prometheus,prometheus.metrics_path=/api/v1/metrics/prometheus"
+    ports:
+      - 9515:9515
+      - 9514:9514
+      - 24224:24224
+    depends_on:
+      - elasticsearch
+  kibana:
+    image: docker.elastic.co/kibana/kibana-oss:6.3.1
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
+  es-exporter:
+    image: "justwatch/elasticsearch_exporter:1.0.2"
+    command: "-es.uri http://elasticsearch:9200 -es.all -es.indices"
+    environment:
+      SERVICE_NAME: "es-exporter"
+      SERVICE_TAGS: "prometheus"
+    depends_on:
+      - elasticsearch
+ 
+  # queue
+  rabbitmq:
+    image: rabbitmq:3.7-management
+    ports:
+      - 15672:15672
+  rabbitmq-exporter:
+    image: kbudde/rabbitmq-exporter
+    environment:
+      RABBITMQ_URL: "http://rabbitmq:15672"
+      SERVICE_NAME: "rabbitmq-exporter"
+      SERVICE_TAGS: "prometheus"
